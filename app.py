@@ -1,8 +1,15 @@
 # importing neccseary modules
 import streamlit as st
 from pathlib import Path
-import google.generativeai as genai
 import os
+from audio_recorder_streamlit import audio_recorder
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+
+import torch
+import soundfile as sf
+
+# Load the pre-trained model and processor
+
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -13,7 +20,6 @@ api_key1 = os.getenv('api_key1')
 st.set_page_config(page_title="VitalImage Analytics", page_icon=":robot:")
 
 # config gemini api key
-genai.configure(api_key=api_key1)
 
 # Set up the model
 generation_config = {
@@ -77,9 +83,6 @@ Please provide me an output with these 4 heading 1)detailed analysis ,2)Findings
 """
 
 # model configaration 
-model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest",
-                              generation_config=generation_config,
-                              safety_settings=safety_settings)
 
 
 #set the logo
@@ -95,37 +98,30 @@ st.title(" Ai 🤖 Medical Assistant 👨‍⚕⚕️👩‍⚕")
 
 st.subheader("An application that can help users to identify medical images")
 
+audio_bytes = audio_recorder()
+if audio_bytes:
+    st.audio(audio_bytes, format="audio/wav")
 
-uploaded_file = st.file_uploader("Upload the medical image for analysis", type=["png", "jpg" , "jpeg"])
-if uploaded_file:
-    # displaying image 
-    st.image(uploaded_file,width=250, caption="Uploaded  medical image")
-submit_button=st.button("Generate Analysis")
+model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
 
-if submit_button:
-    image_data=uploaded_file.getvalue()
+# Load your audio file
+audio_input, sample_rate = sf.read(audio_bytes)
 
+# Preprocess the audio input
+input_values = processor(audio_input, sampling_rate=sample_rate, return_tensors="pt").input_values
 
-    # making image ready
-    image_parts = [
-           {
-             "mime_type": "image/jpeg",
-            "data": image_data
-            },
+# Perform inference (transcribe the audio)
+with torch.no_grad():
+    logits = model(input_values).logits
 
-            ]
+# Get the predicted IDs
+predicted_ids = torch.argmax(logits, dim=-1)
+
+# Decode the IDs to text
+transcription = processor.decode(predicted_ids[0])
+
+st.write(transcription)
     
-
-    # making inbuilt promt ready
-    prompt_parts = [    
-       
-          image_parts[0],
-          system_prompt,
-     ]
-    
-    st.title("Here is the analysis based on image that is")
-    # genarating reponse
-    response= model.generate_content(prompt_parts)
-    st.write(response.text)
 
    
