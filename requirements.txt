@@ -10,3 +10,4 @@ tempfile
 transformers
 datasets
 faster_whisper
+ffmpeg
